@@ -25,6 +25,8 @@ GEM
     rack (1.5.2)
     rack-protection (1.5.1)
       rack
+    rack-test (0.6.2)
+      rack (>= 1.0)
     rake (10.1.0)
     sinatra (1.4.4)
       rack (~> 1.4)
@@ -43,6 +45,8 @@ PLATFORMS
   x86-mingw32
 
 DEPENDENCIES
+  minitest
+  rack-test
   rake
   sinatra
   sinatra-activerecord
