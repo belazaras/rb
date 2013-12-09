@@ -28,4 +28,15 @@ class AppTest < Minitest::Unit::TestCase
     assert_equal 404, last_response.status
     assert_equal 'Not Found', last_response.body
   end
+
+  def test_get_resource_bookings
+  	get '/resources/1/bookings?date=asd'
+  	assert_equal 404, last_response.status
+  	get '/resources/1/bookings?limit=asd'
+  	assert_equal 404, last_response.status
+  	get '/resources/1/bookings?status=asd'
+  	assert_equal 404, last_response.status
+  	get '/resources/1/bookings?'
+  	assert_equal 200, last_response.status
+  end
 end
