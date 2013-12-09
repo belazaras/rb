@@ -36,7 +36,5 @@ class AppTest < Minitest::Unit::TestCase
   	assert_equal 404, last_response.status
   	get '/resources/1/bookings?status=asd'
   	assert_equal 404, last_response.status
-  	get '/resources/1/bookings?'
-  	assert_equal 200, last_response.status
   end
 end
