@@ -1,12 +1,30 @@
 require 'bundler'
 Bundler.require :default, ENV['RACK_ENV'].to_sym
-
+require 'sinatra/reloader'
+#load 'model/resource.rb'
+load 'model/booking.rb'
 set :database, "sqlite3:///bookings.sqlite3"
 
 class Resource < ActiveRecord::Base
-end
+	def to_hash
+		return {name: name, description: description, links: [rel: 'self', uri: FULL_URL+"/#{id}"]}
+	end
 
-class Booking < ActiveRecord::Base
+	def to_json 
+		res = self.to_hash
+		res[:links] = [{rel: 'self', uri: FULL_URL}, {rel: 'bookings', uri: "#{FULL_URL}/bookings"}]
+		return JSON.pretty_generate({resource: res})
+	end
+
+	def self.to_json
+		links = [rel: 'self', uri: FULL_URL]
+
+		resources = Resource.all.collect do |r|
+			r.to_hash
+		end
+		res = {resources: resources, links: links}
+		return JSON.pretty_generate(res)
+	end
 end
 
 not_found do
@@ -15,24 +33,15 @@ end
 
 get '/resources' do
 	content_type :json
-
-	links = [rel: 'self', uri: request.url]
-	resources = Resource.all.collect do |r|
-		{name: r.name, description: r.description, links: [rel: 'self', uri: "#{request.url}/#{r.id}"]}
-	end
-
-	hash = {resources: resources, links: links}
-	JSON.pretty_generate(hash)
+	FULL_URL = request.url
+	Resource.to_json
 end
 
 get '/resources/:id' do
 	begin
 		content_type :json
-		r = Resource.find(params[:id])
-		links = [{rel: 'self', uri: request.url}, {rel: 'bookings', uri: "#{request.url}/bookings"}]
-		res = {name: r.name, description: r.description, links: links}
-		JSON.pretty_generate(res)
-
+		FULL_URL = request.url
+		Resource.find(params[:id]).to_json
 	rescue ActiveRecord::RecordNotFound
 		redirect to(not_found)
 	end
@@ -100,7 +109,6 @@ get '/resources/:id/availability' do
 	str_end = end_date.strftime("%Y-%m-%d").to_s + ' 00:00:00'
 
 	avl = get_availability(str_start,str_end)
-	#avl.inspect
 	hash = {availability: avl, links: [{rel: 'self', uri: request.url}]}
 	JSON.pretty_generate(hash)
 end
@@ -123,4 +131,16 @@ def get_availability(start_d,end_d)
 	avl.shift if start_d == avl.first[:to].to_s
 	puts avl.first[:to].to_s
 	return avl
+end
+
+post '/resources/:id/bookings' do
+	begin
+	from = DateTime.parse(params[:from]).strftime("%Y-%m-%d %H:%M:%S")
+	to = DateTime.parse(params[:to]).strftime("%Y-%m-%d %H:%M:%S")
+	rescue ArgumentError
+		redirect to(not_found)
+	end
+
+	hash = {from: from, to: to, asd: from < to}
+	JSON.pretty_generate(hash)
 end

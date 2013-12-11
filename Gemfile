@@ -6,6 +6,7 @@ gem 'sqlite3'
 
 group :development do
   gem 'rake'
+  gem 'sinatra-contrib'
 end
 
 group :test do
