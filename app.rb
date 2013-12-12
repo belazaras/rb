@@ -44,22 +44,26 @@ get '/resources/:id/bookings' do
 	str_end = end_date.strftime("%Y-%m-%d").to_s + ' 23:59:59'
 
 	bks = get_bookings(params[:id],str_start,str_end,status)
-	return status 204 if bks.empty?
+
+	links = [{rel: 'self', uri: request.url}]
+
+	empty = {bookings: [], links: links}
+	return JSON.pretty_generate(empty) if bks.empty?
 
 	bookings = bks.collect do |b|
 		b.to_hash request.base_url
 	end
 
-	hash = {bookings: bookings, links: [{rel: 'self', uri: request.url}]}
+	hash = {bookings: bookings, links: links}
 	JSON.pretty_generate(hash)
 end
 
 def get_bookings(res_id,start_d,end_d,status)
 	if status == 'all'
-		bks = Booking.where("resource_id = :res_id AND start >= :start_date AND start < :end_date AND status <> 'canceled'",
+		bks = Booking.where("resource_id = :res_id AND status = <> 'canceled' AND start <= :end_date AND end > :start_date",
   		{res_id: res_id, start_date: start_d, end_date: end_d})
   	else
-  		bks = Booking.where("resource_id = :res_id AND start >= :start_date AND start < :end_date AND status = :status",
+  		bks = Booking.where("resource_id = :res_id AND status = :status AND start <= :end_date AND end > :start_date",
   		{res_id: res_id, start_date: start_d, end_date: end_d, status: status})
   	end
   	return bks
@@ -96,10 +100,11 @@ end
 
 def get_availability(res_id,start_d,end_d)
 	links = [{rel: 'book', uri: url("/resources/#{params[:id]}/bookings"), method: 'POST'}, {rel: 'resource', uri: url("/resources/#{params[:id]}")}]
+	
 	bks = get_bookings(res_id,start_d,end_d,'approved')
-
+	puts 'pito'
 	return [{from: start_d, to: end_d, links: links}] if bks.empty?
-
+	puts 'asd'
 	ini = start_d
 	avl = []
 	bks.collect do |b|
@@ -108,19 +113,30 @@ def get_availability(res_id,start_d,end_d)
 	end
 
 	avl.pop if avl.last[:to] >= end_d
-	avl.push({from: ini, to: end_d, links: links}) if avl.last[:to] < end_d
-	avl.shift if start_d == avl.first[:to].to_s
+	avl.push({from: ini, to: end_d, links: links}) if !avl.empty? && avl.last[:to] < end_d
+	avl.shift if !avl.empty? && start_d >= avl.first[:from].to_s
 	return avl
+end
+
+get '/test' do
+	content_type :json
+	from = Time.parse('2013-11-14T10:00:00Z').strftime("%Y-%m-%d %H:%M:%S")
+	to = Time.parse('2013-11-14T11:00:00Z').strftime("%Y-%m-%d %H:%M:%S")
+	avl = get_availability 2,from,to
+	avl.inspect
 end
 
 post '/resources/:id/bookings' do
 	content_type :json
 	begin
-	from = Time.iso8601(params[:from])
-	to   = Time.iso8601(params[:to])
+	test_from = Time.iso8601(params[:from])
+	test_to   = Time.iso8601(params[:to])
 	rescue ArgumentError
 		redirect to(not_found)
 	end
+
+	from = Time.parse(params[:from]).strftime("%Y-%m-%d %H:%M:%S")
+	to = Time.parse(params[:to]).strftime("%Y-%m-%d %H:%M:%S")
 
 	redirect to(not_found) if from >= to
 	id = params[:id]
@@ -135,7 +151,9 @@ post '/resources/:id/bookings' do
 	return status 409 if avl.first[:from] != from
 
 	status 201
-	bk = Booking.create(start: from, end: to, resource_id: id, status: 'pending', user: 'no_se_pide_en_el_post@gmail.com').to_json request.base_url
+	bk = Booking.create(start: from, end: to, resource_id: id, status: 'pending', user: 'no_se_pide_en_el_post@gmail.com').to_hash request.base_url
+	bk[:links].delete_at 1
+	JSON.pretty_generate({book: bk})
 end
 
 delete '/resources/:id/bookings/:bkid' do
@@ -151,7 +169,6 @@ delete '/resources/:id/bookings/:bkid' do
 end
 
 put '/resources/:id/bookings/:bkid' do
-	#Falta cancelar todas las demas.
 	content_type :json
 	begin
 		bk = Booking.find(params[:bkid])
@@ -162,6 +179,7 @@ put '/resources/:id/bookings/:bkid' do
 	avl = get_availability params[:id],bk.start,bk.end
 	return status 409 if avl.count!=1
 	return status 409 if avl.first[:from] != bk.start
+	return status 409 if bk.status != 'pending'
 
 	bk.status = 'approved'
 	bk.save
