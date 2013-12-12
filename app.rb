@@ -1,31 +1,9 @@
 require 'bundler'
 Bundler.require :default, ENV['RACK_ENV'].to_sym
 require 'sinatra/reloader'
-#load 'model/resource.rb'
+load 'model/resource.rb'
 load 'model/booking.rb'
 set :database, "sqlite3:///bookings.sqlite3"
-
-class Resource < ActiveRecord::Base
-	def to_hash
-		return {name: name, description: description, links: [rel: 'self', uri: FULL_URL+"/#{id}"]}
-	end
-
-	def to_json 
-		res = self.to_hash
-		res[:links] = [{rel: 'self', uri: FULL_URL}, {rel: 'bookings', uri: "#{FULL_URL}/bookings"}]
-		return JSON.pretty_generate({resource: res})
-	end
-
-	def self.to_json
-		links = [rel: 'self', uri: FULL_URL]
-
-		resources = Resource.all.collect do |r|
-			r.to_hash
-		end
-		res = {resources: resources, links: links}
-		return JSON.pretty_generate(res)
-	end
-end
 
 not_found do
   'Not Found'
@@ -33,15 +11,13 @@ end
 
 get '/resources' do
 	content_type :json
-	FULL_URL = request.url
-	Resource.to_json
+	Resource.to_json request.base_url 
 end
 
 get '/resources/:id' do
 	begin
 		content_type :json
-		FULL_URL = request.url
-		Resource.find(params[:id]).to_json
+		Resource.find(params[:id]).to_json request.base_url
 	rescue ActiveRecord::RecordNotFound
 		redirect to(not_found)
 	end
@@ -55,9 +31,9 @@ get '/resources/:id/bookings' do
 	status = params[:status].present? ? params[:status]		 : 'approved'
 
 	valid_date   = date =~ /^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[1-2][0-9]|3[0-1])$/ ? true : false
-	#valid_params = params.keys.collect { |key| key.to_s == ('limit' or 'status' or 'date') ? true : false }
+	valid_params = params.keys.collect { |key| ["id", "date", "limit", "status", "splat", "captures"].include?(key.to_s) }
 
-	conditions = [valid_date, limit.to_i > 0, limit.to_i <= 365, ["approved", "pending", "all"].include?(status)]
+	conditions = [valid_date, limit.to_i > 0, limit.to_i <= 365, ["approved", "pending", "all"].include?(status), valid_params.all?]
 
 	if !conditions.all?
 		redirect to(not_found)
@@ -67,26 +43,24 @@ get '/resources/:id/bookings' do
 	str_start = date.to_s + ' 00:00:00'
 	str_end = end_date.strftime("%Y-%m-%d").to_s + ' 23:59:59'
 
-	bks = get_bookings(str_start,str_end,status)
-	redirect to(not_found) if bks.empty?
+	bks = get_bookings(params[:id],str_start,str_end,status)
+	return status 204 if bks.empty?
 
 	bookings = bks.collect do |b|
-		uri = url("/resources/#{params[:id]}/bookings/#{b.id}")
-		b_links = [{rel: 'self', uri: uri}, {rel: 'resource', uri: url("/resources/#{params[:id]}")}, {rel: 'accept', uri: uri, method: 'PUT'}, {rel: 'reject', uri: uri, method: 'DELETE'}]
-		{start: b.start, end: b.end, status: b.status, user: b.user, links: b_links}
+		b.to_hash request.base_url
 	end
 
 	hash = {bookings: bookings, links: [{rel: 'self', uri: request.url}]}
 	JSON.pretty_generate(hash)
 end
 
-def get_bookings(start_d,end_d,status)
+def get_bookings(res_id,start_d,end_d,status)
 	if status == 'all'
-		bks = Booking.where("resource_id = :res_id AND start >= :start_date AND end <= :end_date AND status <> 'canceled'",
-  		{res_id: params[:id], start_date: start_d, end_date: end_d})
+		bks = Booking.where("resource_id = :res_id AND start >= :start_date AND start < :end_date AND status <> 'canceled'",
+  		{res_id: res_id, start_date: start_d, end_date: end_d})
   	else
-  		bks = Booking.where("resource_id = :res_id AND start >= :start_date AND end <= :end_date AND status = :status",
-  		{res_id: params[:id], start_date: start_d, end_date: end_d, status: status})
+  		bks = Booking.where("resource_id = :res_id AND start >= :start_date AND start < :end_date AND status = :status",
+  		{res_id: res_id, start_date: start_d, end_date: end_d, status: status})
   	end
   	return bks
 end
@@ -97,8 +71,9 @@ get '/resources/:id/availability' do
 	date  = params[:date].present?   ? params[:date]   	 : Time.now.tomorrow.strftime("%Y-%m-%d")
 	limit = params[:limit].present?  ? params[:limit].to_i  : 30
 	valid_date = date =~ /^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[1-2][0-9]|3[0-1])$/ ? true : false
+	valid_params = params.keys.collect { |key| ["id", "date", "limit", "splat", "captures"].include?(key.to_s) }
 
-	conditions = [valid_date, limit.to_i > 0, limit.to_i <= 365]
+	conditions = [valid_date, limit.to_i > 0, limit.to_i <= 365, valid_params.all?]
 
 	if !conditions.all?
 		redirect to(not_found)
@@ -108,16 +83,22 @@ get '/resources/:id/availability' do
 	str_start = date.to_s + ' 00:00:00'
 	str_end = end_date.strftime("%Y-%m-%d").to_s + ' 00:00:00'
 
-	avl = get_availability(str_start,str_end)
+	begin
+		Resource.find(params[:id])
+	rescue ActiveRecord::RecordNotFound
+		redirect to(not_found)
+	end
+
+	avl = get_availability(params[:id],str_start,str_end)
 	hash = {availability: avl, links: [{rel: 'self', uri: request.url}]}
 	JSON.pretty_generate(hash)
 end
 
-def get_availability(start_d,end_d)
+def get_availability(res_id,start_d,end_d)
 	links = [{rel: 'book', uri: url("/resources/#{params[:id]}/bookings"), method: 'POST'}, {rel: 'resource', uri: url("/resources/#{params[:id]}")}]
-	bks = get_bookings(start_d,end_d,'approved')
+	bks = get_bookings(res_id,start_d,end_d,'approved')
 
-	return {from: start_d, to: end_d, links: links} if bks.empty?
+	return [{from: start_d, to: end_d, links: links}] if bks.empty?
 
 	ini = start_d
 	avl = []
@@ -129,18 +110,74 @@ def get_availability(start_d,end_d)
 	avl.pop if avl.last[:to] >= end_d
 	avl.push({from: ini, to: end_d, links: links}) if avl.last[:to] < end_d
 	avl.shift if start_d == avl.first[:to].to_s
-	puts avl.first[:to].to_s
 	return avl
 end
 
 post '/resources/:id/bookings' do
+	content_type :json
 	begin
-	from = DateTime.parse(params[:from]).strftime("%Y-%m-%d %H:%M:%S")
-	to = DateTime.parse(params[:to]).strftime("%Y-%m-%d %H:%M:%S")
+	from = Time.iso8601(params[:from])
+	to   = Time.iso8601(params[:to])
 	rescue ArgumentError
 		redirect to(not_found)
 	end
 
-	hash = {from: from, to: to, asd: from < to}
-	JSON.pretty_generate(hash)
+	redirect to(not_found) if from >= to
+	id = params[:id]
+	begin
+		Resource.find(id)
+	rescue ActiveRecord::RecordNotFound
+		redirect to(not_found)
+	end
+
+	avl = get_availability id,from,to
+	return status 409 if avl.count!=1
+	return status 409 if avl.first[:from] != from
+
+	status 201
+	bk = Booking.create(start: from, end: to, resource_id: id, status: 'pending', user: 'no_se_pide_en_el_post@gmail.com').to_json
+
+	#JSON.pretty_generate({asd: avl})
 end
+
+delete '/resources/:id/bookings/:bkid' do
+	#Hacerlo logico.
+	begin
+		bk = Booking.find(params[:bkid])
+	rescue ActiveRecord::RecordNotFound
+		redirect to(not_found)
+	end
+
+	bk.destroy
+	status 200
+end
+
+put '/resources/:id/bookings/:bkid' do
+	#Falta cancelar todas las demas.
+	content_type :json
+	begin
+		bk = Booking.find(params[:bkid])
+	rescue ActiveRecord::RecordNotFound
+		redirect to(not_found)
+	end
+
+	avl = get_availability params[:id],bk.start,bk.end
+	return status 409 if avl.count!=1
+	return status 409 if avl.first[:from] != bk.start
+
+	bk.status = 'approved'
+	bk.save
+
+	bk.to_json
+end
+
+get '/resources/:id/bookings/:bkid' do
+	content_type :json
+	begin
+		bk = Booking.find(params[:bkid])
+	rescue ActiveRecord::RecordNotFound
+		redirect to(not_found)
+	end
+
+	bk.to_json request.base_url
+end 
