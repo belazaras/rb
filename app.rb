@@ -135,20 +135,18 @@ post '/resources/:id/bookings' do
 	return status 409 if avl.first[:from] != from
 
 	status 201
-	bk = Booking.create(start: from, end: to, resource_id: id, status: 'pending', user: 'no_se_pide_en_el_post@gmail.com').to_json
-
-	#JSON.pretty_generate({asd: avl})
+	bk = Booking.create(start: from, end: to, resource_id: id, status: 'pending', user: 'no_se_pide_en_el_post@gmail.com').to_json request.base_url
 end
 
 delete '/resources/:id/bookings/:bkid' do
-	#Hacerlo logico.
 	begin
 		bk = Booking.find(params[:bkid])
 	rescue ActiveRecord::RecordNotFound
 		redirect to(not_found)
 	end
 
-	bk.destroy
+	bk.status = 'canceled'
+	bk.save
 	status 200
 end
 
@@ -167,8 +165,14 @@ put '/resources/:id/bookings/:bkid' do
 
 	bk.status = 'approved'
 	bk.save
+	
+	bks = get_bookings(bk.resource_id,bk.start,bk.end,'pending')
+	bks.each do |b|
+		b.status = 'canceled'
+		b.save
+	end
 
-	bk.to_json
+	bk.to_json request.base_url
 end
 
 get '/resources/:id/bookings/:bkid' do
