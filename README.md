@@ -10,3 +10,7 @@ Para instalar todo en cualquier lado:
 -Instalar bundler `gem install bundler`.
 
 -Que bundler instale las dependencias `bundle`.
+
+-Correr los tests con `bundle exec rake`.
+
+-Levantar el server con `bundle exec rackup`.
