@@ -2,8 +2,8 @@
 require 'bundler'
 Bundler.require :default, ENV['RACK_ENV'].to_sym
 require 'sinatra/reloader'
-load 'model/resource.rb'
-load 'model/booking.rb'
+require_relative 'model/resource'
+require_relative 'model/booking'
 set :database, 'sqlite3:///bookings.sqlite3'
 
 not_found do
@@ -36,9 +36,15 @@ get '/resources/:id/bookings' do
   valid_date =
     date =~ /^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[1-2][0-9]|3[0-1])$/ ? true :
     false
-  valid_params = params.keys.map { |key| ['id', 'date', 'limit', 'status', 'splat', 'captures'].include?(key.to_s) }
 
-  conditions = [valid_date, limit.to_i > 0, limit.to_i <= 365, ['approved', 'pending', 'all'].include?(status), valid_params.all?]
+  valid_params =
+    params.keys.map do |k|
+      %w(id date limit status splat captures).include?(k.to_s)
+    end
+
+  conditions = [valid_date, limit.to_i > 0, limit.to_i <= 365, %w(
+    approved pending all
+  ).include?(status), valid_params.all?]
 
   redirect to(not_found) unless conditions.all?
 
@@ -63,16 +69,22 @@ end
 
 def get_bookings(res_id, start_d, end_d, status)
   if status == 'all'
-    bks = Booking.where("resource_id = :res_id AND status = <> 'canceled' AND start <= :end_date AND end > :start_date",
+    bks = Booking.where(
+      "resource_id = :res_id AND status = <> 'canceled' AND
+      start <= :end_date AND end > :start_date",
       res_id: res_id,
       start_date: start_d,
-      end_date: end_d)
+      end_date: end_d
+    )
   else
-    bks = Booking.where("resource_id = :res_id AND status = :status AND start <= :end_date AND end > :start_date",
+    bks = Booking.where(
+      "resource_id = :res_id AND status = :status AND
+      start <= :end_date AND end > :start_date",
       res_id: res_id,
       start_date: start_d,
       end_date: end_d,
-      status: status)
+      status: status
+    )
   end
   bks
 end
@@ -80,12 +92,17 @@ end
 get '/resources/:id/availability' do
   content_type :json
 
-  date  = params[:date].present?   ? params[:date]   	 : Time.now.tomorrow.strftime('%Y-%m-%d')
-  limit = params[:limit].present?  ? params[:limit].to_i  : 30
-  valid_date = date =~ /^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[1-2][0-9]|3[0-1])$/ ? true : false
-  valid_params = params.keys.map { |key| ['id', 'date', 'limit', 'splat', 'captures'].include?(key.to_s) }
+  d = params[:date]
+  date = d.present? ? d : Time.now.tomorrow.strftime('%Y-%m-%d')
+  limit = params[:limit].present? ? params[:limit].to_i : 30
+  valid_date =
+    date =~ /^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[1-2][0-9]|3[0-1])$/
+  valid_params =
+    params.keys.map { |k| %w(id date limit splat captures).include?(k.to_s) }
 
-  conditions = [valid_date, limit.to_i > 0, limit.to_i <= 365, valid_params.all?]
+  conditions = [
+    valid_date, limit.to_i > 0, limit.to_i <= 365, valid_params.all?
+  ]
 
   redirect to(not_found) unless conditions.all?
 
@@ -105,7 +122,15 @@ get '/resources/:id/availability' do
 end
 
 def get_availability(res_id, start_d, end_d)
-  links = [{ rel: 'book', uri: url("/resources/#{params[:id]}/bookings"), method: 'POST' }, { rel: 'resource', uri: url("/resources/#{params[:id]}") }]
+  links = [
+    {
+      rel: 'book', uri: url("/resources/#{params[:id]}/bookings"),
+      method: 'POST'
+    },
+    {
+      rel: 'resource', uri: url("/resources/#{params[:id]}")
+    }
+  ]
 
   bks = get_bookings(res_id, start_d, end_d, 'approved')
   return [{ from: start_d, to: end_d, links: links }] if bks.empty?
@@ -118,7 +143,11 @@ def get_availability(res_id, start_d, end_d)
   end
 
   avl.pop if avl.last[:to] >= end_d
-  avl.push(from: ini, to: end_d, links: links) if !avl.empty? && avl.last[:to] < end_d
+
+  if !avl.empty? && avl.last[:to] < end_d
+    avl.push(from: ini, to: end_d, links: links)
+  end
+
   avl.shift if !avl.empty? && start_d >= avl.first[:from].to_s
   avl
 end
@@ -156,7 +185,11 @@ post '/resources/:id/bookings' do
   return status 409 if avl.first[:from] != from
 
   status 201
-  bk = Booking.create(start: from, end: to, resource_id: id, status: 'pending', user: 'no_se_pide_en_el_post@gmail.com').to_hash request.base_url
+  bk = Booking.create(
+    start: from, end: to, resource_id: id, status: 'pending',
+    user: 'no_se_pide_en_el_post@gmail.com'
+  ).to_hash request.base_url
+
   bk[:links].delete_at 1
   JSON.pretty_generate(book: bk)
 end

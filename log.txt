@@ -1,0 +1,16 @@
+Inspecting 1 file
+C
+
+Offences:
+
+app.rb:70:1: C: Method has too many lines. [19/10]
+def get_bookings(res_id, start_d, end_d, status)
+^^^
+app.rb:124:1: C: Cyclomatic complexity for get_availability is too high. [7/6]
+def get_availability(res_id, start_d, end_d)
+^^^
+app.rb:124:1: C: Method has too many lines. [23/10]
+def get_availability(res_id, start_d, end_d)
+^^^
+
+1 file inspected, 3 offences detected

@@ -1,6 +1,8 @@
+# encoding: UTF-8
+# Migracion Resources
 class CreateResources < ActiveRecord::Migration
   def change
-  	create_table :resources do |t|
+    create_table :resources do |t|
       t.string :name
       t.text :description
     end

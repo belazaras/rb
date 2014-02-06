@@ -1,5 +1,5 @@
-load '../model/resource.rb'
-load '../model/booking.rb'
+require_relative '../model/resource'
+require_relative '../model/booking'
 Resource.create(name: "Computadora", description: "Notebook con 4GB de RAM y 256 GB de espacio en disco con Linux")
 Resource.create(name: "Monitor", description: "Monitor de 24 pulgadas SAMSUNG")
 Resource.create(name: "Sala de reuniones", description: "Sala de reuniones con máquinas y proyector")
