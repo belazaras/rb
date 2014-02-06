@@ -1,6 +1,7 @@
 # encoding: UTF-8
 # Clase Booking
 class Booking < ActiveRecord::Base
+  # agregar validaciones
   def to_hash(link)
     uri = link + "/resources/#{resource_id}/bookings/#{id}"
     b_links = [

@@ -17,21 +17,25 @@ class AppTest < Minitest::Unit::TestCase
     DatabaseCleaner.clean
   end
 
-  def test_get_nonexistent_page
+  def test_get_nonexistent_page # no va
     get '/error'
     assert_equal 404, last_response.status
     assert_equal 'Not Found', last_response.body
   end
 
-  def test_get_resources
+  def test_get_resources# testear q sea json
     get '/resources'
     assert_equal 200, last_response.status
   end
+
+  #testear formato: json expressions
 
   def test_get_resource
     get '/resources/1'
     assert_equal 200, last_response.status
   end
+
+#testear un id valido pero inexistente, abajo testeo fruta nomas.
 
   def test_get_nonexistent_resource
     get '/resources/asd'
@@ -39,6 +43,9 @@ class AppTest < Minitest::Unit::TestCase
     assert_equal 'Not Found', last_response.body
   end
 
+# testear resources/id/bookings con id valido, con invalido, y fruta ya esta.
+# testear las diferentes combinaciones de parametros validos e invalidos y ver q den lo q corresponda.
+# testear q el body y content type sea json si o si.
   def test_get_res_booking_wrong_date
     get '/resources/1/bookings?date=asd'
     assert_equal 404, last_response.status

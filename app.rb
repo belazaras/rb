@@ -121,6 +121,12 @@ get '/resources/:id/availability' do
   JSON.pretty_generate(hash)
 end
 
+# ver esto:
+error ActiveRecord::RecordNotFound do |error|
+  'error'
+  redirect to(not_found)
+end
+
 def get_availability(res_id, start_d, end_d)
   links = [
     {

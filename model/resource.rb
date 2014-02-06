@@ -1,6 +1,8 @@
 # encoding: UTF-8
 # Clase Resource
 class Resource < ActiveRecord::Base
+
+  # agregar validaciones basicas (q tenga nombre, unico)
   def to_hash(link)
     {
       name: name, description: description,
