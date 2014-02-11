@@ -13,4 +13,5 @@ group :test do
   gem 'minitest', require: 'minitest/autorun'
   gem 'rack-test'
   gem 'database_cleaner'
+  gem 'json_expressions'
 end

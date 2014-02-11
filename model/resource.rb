@@ -1,8 +1,9 @@
 # encoding: UTF-8
 # Clase Resource
 class Resource < ActiveRecord::Base
-
-  # agregar validaciones basicas (q tenga nombre, unico)
+  validates :name, :description, presence: true
+  validates :name, length: { maximum: 255 }
+  
   def to_hash(link)
     {
       name: name, description: description,
