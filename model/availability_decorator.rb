@@ -15,7 +15,7 @@ class AvailabilityDecorator < Decorator
       links: [
         {
           rel: "book",
-          link: "#{url}/resources/#{c[:res_id]}/bookings",
+          uri: "#{url}/resources/#{c[:res_id]}/bookings",
           method: "POST"
         },
         {

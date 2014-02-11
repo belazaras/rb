@@ -1,20 +1,7 @@
 # encoding: UTF-8
 require 'bundler'
 Bundler.require :default, ENV['RACK_ENV'].to_sym
-require 'sinatra/reloader'
-require_relative 'model/resource'
-require_relative 'model/resource_decorator'
-require_relative 'model/booking'
-require_relative 'model/booking_decorator'
-require_relative 'model/availability_decorator'
-require_relative 'lib/validator'
-
-set :database, 'sqlite3:///bookings.sqlite3'
-#set :database, 'sqlite3:///bookings-ASD.sqlite3'
-# ActiveRecord::Base.logger.level = 1
-# set :dump_errors, false
-disable :raise_errors
-disable :show_exceptions
+require_relative 'app_helper'
 
 error ActiveRecord::RecordNotFound do
   status 404
@@ -25,25 +12,6 @@ end
 #   status 409
 #   'Error'
 # end
-
-##################################
-# get '/borrar' do
-#   bd = BookingDecorator.new(Booking.find(5)).jsonize(request.base_url)
-
-#   #bks = Booking.where("resource_id = :res_id",res_id: 2)
-#   #bks = []
-#   #BookingDecorator.jsonize(bks, request)
-
-#   #res_d = ResourceDecorator.new(Resource.find(1)).jsonize(request.base_url)
-
-#   #bks = Resource.all
-#   #bks = []
-#   #ResourceDecorator.jsonize(bks, request)
-
-#   avl = [{ from: "PEPE", to: "CACA", res_id: '1'}, { from: "PEPE", to: "CACA", res_id: '1'}]
-#   AvailabilityDecorator.jsonize(avl, request)
-# end
-##################################
 
 error do
   status 409
@@ -59,12 +27,13 @@ before do
 end
 
 get '/resources' do
-  Resource.to_json request.base_url
+  ResourceDecorator.jsonize(Resource.all, request)
 end
 
 get '/resources/:id' do
   Integer(params[:id])
-  Resource.find(params[:id]).to_json request.base_url
+  res = Resource.find(params[:id])
+  ResourceDecorator.new(res).jsonize(request.base_url)
 end
 
 get '/resources/:id/bookings' do
@@ -85,20 +54,7 @@ get '/resources/:id/bookings' do
   str_end = end_date.strftime('%Y-%m-%d').to_s + ' 23:59:59'
 
   bks = get_bookings(params[:id], str_start, str_end, status)
-
-  links = [{ rel: 'self', uri: request.url }]
-
-  empty = { bookings: [], links: links }
-  
-  # Usado para cortar el flujo de control.
-  return JSON.pretty_generate(empty) if bks.empty?
-
-  bookings = bks.map do |b|
-    b.to_hash request.base_url
-  end
-
-  hash = { bookings: bookings, links: links }
-  JSON.pretty_generate(hash)
+  BookingDecorator.jsonize(bks, request)
 end
 
 get '/resources/:id/availability' do
@@ -118,8 +74,7 @@ get '/resources/:id/availability' do
   Resource.find(params[:id])
 
   avl = get_availability(params[:id], str_start, str_end)
-  hash = { availability: avl, links: [{ rel: 'self', uri: request.url }] }
-  JSON.pretty_generate(hash)
+  AvailabilityDecorator.jsonize(avl, request)
 end
 
 post '/resources/:id/bookings' do
@@ -143,10 +98,8 @@ post '/resources/:id/bookings' do
   bk = Booking.create(
     start: from, end: to, resource_id: id, status: 'pending',
     user: 'no_se_pide_en_el_post@gmail.com'
-  ).to_hash request.base_url
-
-  bk[:links].delete_at 1
-  JSON.pretty_generate(book: bk)
+  )
+  BookingDecorator.new(bk).jsonize(request.base_url)
 end
 
 delete '/resources/:id/bookings/:bkid' do
@@ -173,13 +126,12 @@ put '/resources/:id/bookings/:bkid' do
     b.status = 'canceled'
     b.save
   end
-
-  bk.to_json request.base_url
+  BookingTwinDecorator.new(bk).jsonize(request.base_url)
 end
 
 get '/resources/:id/bookings/:bkid' do
   bk = Booking.find(params[:bkid])
-  bk.to_json request.base_url
+  BookingTwinDecorator.new(bk).jsonize(request.base_url)
 end
 
 def tomorrow
@@ -216,38 +168,30 @@ def get_bookings(res_id, start_d, end_d, status)
 end
 
 def get_availability(res_id, start_d, end_d)
-  links = [
-    {
-      rel: 'book', uri: url("/resources/#{params[:id]}/bookings"),
-      method: 'POST'
-    },
-    {
-      rel: 'resource', uri: url("/resources/#{params[:id]}")
-    }
-  ]
-
   start_normal = parse_date(start_d)
   end_normal = parse_date(end_d)
   start_8601 = get_8601_date(start_d)
   end_8601 = get_8601_date(end_d)
 
   bks = get_bookings(res_id, start_normal, end_normal, 'approved')
-  # Usado para cortar el flujo de control.
-  return [{ from: start_8601, to: end_8601, links: links }] if bks.empty?
+  avl = [{ from: start_8601, to: end_8601, res_id: res_id }] if bks.empty?
 
-  ini = start_8601
-  avl = []
-  bks.map do |b|
-    avl << { from: ini, to: b.start, links: links }
-    ini = b.end
+  unless bks.empty?
+    ini = start_8601
+    avl = []
+    bks.map do |b|
+      avl << { from: ini, to: b.start, res_id: res_id }
+      ini = b.end
+    end
+
+    avl.pop if avl.last[:to] >= end_8601
+
+    if !avl.empty? && avl.last[:to] < end_8601
+      avl.push(from: ini, to: end_8601, res_id: res_id)
+    end
+
+    avl.shift if !avl.empty? && start_d >= bks.first[:start].to_s
   end
 
-  avl.pop if avl.last[:to] >= end_8601
-
-  if !avl.empty? && avl.last[:to] < end_8601
-    avl.push(from: ini, to: end_8601, links: links)
-  end
-
-  avl.shift if !avl.empty? && start_d >= bks.first[:start].to_s
   avl
 end

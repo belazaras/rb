@@ -1,0 +1,16 @@
+los tests no tienen que mostrar NUNCA información de debug, como por ejemplo, las consultas que hace a la base de datos. 
+  ActiveRecord::Base.logger.level = 1
+
+el test `test_add_same_booking` esta mal, porque estas testeando que se puedan crear 2 reservas sobre el mismo recurso, lo cual no es posible.
+  Si es posible, dos aceptadas a la vez no lo es.
+
+el test `test_accept_nonexistent_booking` esta mal porque estas creando un booking y luego le sumas uno al id para tener un id no existente. Es más facil, y más logico, poner cualquier id antes que lo que hiciste.
+  Era para estar seguro de que no exista, pero ahora que tengo control sobre que entradas hay en la DB tiene más sentido lo que decís.
+  Tambien en test_cancel_nonexistent_booking
+
+A veces usás resource.to_json y a veces usas JSON.pretty_generate. Esta mal. La responsabilidad de renderizar json debería ser siempre de un objeto
+  Mejorado muchisimo, ver BookingTwinDecorator es porque a veces el booking se muestra con 4 links en vez de 3.
+
+  Ver que en availability se carga muchas veces el resource_id, un detalle minusculo al lado de la mejora.a
+
+  En algunos ejemplos de bookins usan start y end y en otros from y to, para consistencia me quedo con from y to

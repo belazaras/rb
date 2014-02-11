@@ -7,10 +7,13 @@ class Decorator
 
   # Redefinido en subclase.
   def to_hash_singular(url); end
+
   def to_hash_plural(url); end
+
   def single_name; end
+
   def self.plural_name; end
-  
+
   def jsonize(url)
     hash = to_hash_singular(url)
     JSON.pretty_generate(single_name => hash)
